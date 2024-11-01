@@ -158,9 +158,18 @@ data:
     set +e
     export caBundle=$(kubectl get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
     [ -z "${caBundle}" ] && echo "ERROR: cannot get CA Bundle" && exit 1
+    cat > ${tmpdir}/patch.json <<EOF
+    [
+      {
+        "op": "add", 
+        "path": "/webhooks/0/clientConfig/caBundle", 
+        "value": "${caBundle}"
+      }
+    ]
+    EOF
     while true; do
       echo "INFO: Trying to patch webhook adding the caBundle."
-      if kubectl patch mutatingwebhookconfiguration "${webhook}" --type='json' -p "[{'op': 'add', 'path': '/webhooks/0/clientConfig/caBundle', 'value':'${caBundle}'}]"; then
+      if kubectl patch mutatingwebhookconfiguration "${webhook}" --type='json' --patch-file='${tmpdir}/patch.json'; then
           break
       fi
       echo "INFO: webhook not patched. Retrying in 5s..."
