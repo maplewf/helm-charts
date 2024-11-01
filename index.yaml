@@ -3,6 +3,18 @@ entries:
   env-injector-webhook:
   - apiVersion: v1
     appVersion: "1.0"
+    created: "2024-11-01T09:14:45.274892208Z"
+    description: A Helm chart for kubernetes environment injector mutating webhook
+    digest: 783b3858da11a90b82ce5d5c23e9384fba7b516e63953d2cfc5c4ae64f31e63e
+    home: https://github.com/hmcts/k8s-env-injector
+    maintainers:
+    - name: HMCTS Platform engineering team
+    name: env-injector-webhook
+    urls:
+    - https://github.com/maplewf/helm-charts/releases/download/env-injector-webhook-0.1.4/env-injector-webhook-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v1
+    appVersion: "1.0"
     created: "2024-11-01T08:10:49.961645316Z"
     description: A Helm chart for kubernetes environment injector mutating webhook
     digest: 68c219551b68468fc91be4ed485d72bac707c85e0ade0c6a7194a6722a8892a3
@@ -25,4 +37,4 @@ entries:
     urls:
     - https://github.com/maplewf/helm-charts/releases/download/env-injector-webhook-0.1.2/env-injector-webhook-0.1.2.tgz
     version: 0.1.2
-generated: "2024-11-01T08:10:49.961656807Z"
+generated: "2024-11-01T09:14:45.274913989Z"
