@@ -77,9 +77,14 @@ data:
         exit 1
     fi
 
-    csrName=${service}.${namespace}
     tmpdir=$(mktemp -d)
-    echo "creating certs in tmpdir ${tmpdir} "
+
+    echo "generating ca in tmpdir ${tmpdir} "
+
+    openssl req -new -sha256 -nodes -newkey rsa:4096 -subj "/O=env-injector-webhook/CN=${service}.${namespace}.svc" -keyout ${tmpdir}/ca.key -out ${tmpdir}/ca.csr
+    openssl x509 -req -sha256 -in ${tmpdir}/ca.csr -signkey ${tmpdir}/ca.key -days 3650 -out ${tmpdir}/ca.crt
+
+    echo "signing certs in tmpdir ${tmpdir} "
 
     cat <<EOF >> ${tmpdir}/csr.conf
     [req]
@@ -97,67 +102,20 @@ data:
     DNS.3 = ${service}.${namespace}.svc
     EOF
 
-    openssl genrsa -out ${tmpdir}/server-key.pem 2048
-    openssl req -new -key ${tmpdir}/server-key.pem -subj "/CN=system:node:${service}.${namespace}.svc;/O=system:nodes" -out ${tmpdir}/server.csr -config ${tmpdir}/csr.conf
-
-    # clean-up any previously created CSR for our service. Ignore errors if not present.
-    kubectl delete csr ${csrName} 2>/dev/null || true
-
-    # create  server cert/key CSR and  send to k8s API
-    # refer to https://docs.aws.amazon.com/eks/latest/userguide/cert-signing.html for signing key in EKS
-    cat <<EOF | kubectl create -f -
-    apiVersion: certificates.k8s.io/v1
-    kind: CertificateSigningRequest
-    metadata:
-      name: ${csrName}
-    spec:
-      signerName: beta.eks.amazonaws.com/app-serving
-      groups:
-      - system:authenticated
-      request: $(cat ${tmpdir}/server.csr | base64 | tr -d '\n')
-      usages:
-      - digital signature
-      - key encipherment
-      - server auth
-    EOF
-
-    # verify CSR has been created
-    while true; do
-        kubectl get csr ${csrName}
-        if [ "$?" -eq 0 ]; then
-            break
-        fi
-    done
-
-    # approve and fetch the signed certificate
-    kubectl certificate approve ${csrName}
-    # verify certificate has been signed
-    for x in $(seq 10); do
-        serverCert=$(kubectl get csr ${csrName} -o jsonpath='{.status.certificate}')
-        if [[ ${serverCert} != '' ]]; then
-            break
-        fi
-        sleep 1
-    done
-    if [[ ${serverCert} == '' ]]; then
-        echo "ERROR: After approving csr ${csrName}, the signed certificate did not appear on the resource. Giving up after 10 attempts." >&2
-        exit 1
-    fi
-    echo ${serverCert} | openssl base64 -d -A -out ${tmpdir}/server-cert.pem
-
+    openssl req -new -nodes -newkey rsa:4096 -subj "/CN=${service}.${namespace}.svc;/O=env-injector-webhook" -keyout ${tmpdir}/server.key -out ${tmpdir}/server.csr -config ${tmpdir}/csr.conf
+    openssl x509 -req -CA ${tmpdir}/ca.crt -CAkey ${tmpdir}/ca.key -CAcreateserial -sha256 -days 3650 -in ${tmpdir}/server.csr -out ${tmpdir}/server.crt
 
     # create the secret with CA cert and server cert/key
     kubectl create secret generic ${secret} \
-            --from-file=key.pem=${tmpdir}/server-key.pem \
-            --from-file=cert.pem=${tmpdir}/server-cert.pem \
+            --from-file=key.pem=${tmpdir}/server.key \
+            --from-file=cert.pem=${tmpdir}/server.crt \
             --dry-run=client -o yaml |
         kubectl -n ${namespace} apply -f -
 
 
     # Patch the webhook adding the caBundle.
     set +e
-    export caBundle=$(kubectl get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
-    [ -z "${caBundle}" ] && echo "ERROR: cannot get CA Bundle" && exit 1
+    export caBundle=$(cat ${tmpdir}/ca.crt | base64 | tr -d '\n')
     cat > ${tmpdir}/patch.json <<EOF
     [
       {
