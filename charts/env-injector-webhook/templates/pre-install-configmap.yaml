@@ -81,29 +81,13 @@ data:
 
     echo "generating ca in tmpdir ${tmpdir} "
 
-    openssl req -new -sha256 -nodes -newkey rsa:4096 -subj "/O=env-injector-webhook/CN=${service}.${namespace}.svc" -keyout ${tmpdir}/ca.key -out ${tmpdir}/ca.csr
-    openssl x509 -req -sha256 -in ${tmpdir}/ca.csr -signkey ${tmpdir}/ca.key -days 3650 -out ${tmpdir}/ca.crt
+    openssl genrsa -out ${tmpdir}/ca.key 2048
+    openssl req -new -x509 -days 3650 -key ${tmpdir}/ca.key -subj "/C=CN/ST=GD/L=SZ/O=Acme, Inc./CN=Acme Root CA" -out ${tmpdir}/ca.crt
 
     echo "signing certs in tmpdir ${tmpdir} "
 
-    cat <<EOF >> ${tmpdir}/csr.conf
-    [req]
-    req_extensions = v3_req
-    distinguished_name = req_distinguished_name
-    [req_distinguished_name]
-    [ v3_req ]
-    basicConstraints = CA:FALSE
-    keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-    extendedKeyUsage = serverAuth
-    subjectAltName = @alt_names
-    [alt_names]
-    DNS.1 = ${service}
-    DNS.2 = ${service}.${namespace}
-    DNS.3 = ${service}.${namespace}.svc
-    EOF
-
-    openssl req -new -nodes -newkey rsa:4096 -subj "/CN=${service}.${namespace}.svc;/O=env-injector-webhook" -keyout ${tmpdir}/server.key -out ${tmpdir}/server.csr -config ${tmpdir}/csr.conf
-    openssl x509 -req -CA ${tmpdir}/ca.crt -CAkey ${tmpdir}/ca.key -CAcreateserial -sha256 -days 3650 -in ${tmpdir}/server.csr -out ${tmpdir}/server.crt
+    openssl req -newkey rsa:2048 -nodes -keyout ${tmpdir}/server.key -subj "/C=CN/ST=GD/L=SZ/O=Acme, Inc./CN=${service}.${namespace}.svc" -out ${tmpdir}/server.csr
+    openssl x509 -req -extfile <(printf "subjectAltName=DNS:${service},DNS:${service}.${namespace},DNS:${service}.${namespace}.svc") -days 3650 -in ${tmpdir}/server.csr -CA ${tmpdir}/ca.crt -CAkey ${tmpdir}/ca.key -CAcreateserial -out ${tmpdir}/server.crt
 
     # create the secret with CA cert and server cert/key
     kubectl create secret generic ${secret} \
