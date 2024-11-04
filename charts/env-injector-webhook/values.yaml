@@ -1,5 +1,7 @@
 image: hmctspublic.azurecr.io/hmcts/k8s-env-injector:496359_20231218
 toolImage: bitnami/kubectl:latest
+hostNetwork: false
+port: 443
 replicas: 2
 removePodAntiAffinity: false
 environment: {}

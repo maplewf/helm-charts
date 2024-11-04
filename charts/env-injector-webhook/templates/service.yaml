@@ -9,7 +9,9 @@ metadata:
     release: {{ .Release.Name }}
 spec:
   ports:
-  - port: 443
-    targetPort: 443
+  - name: webhook
+    port: 443
+    protocol: TCP
+    targetPort: webhook
   selector:
     app.kubernetes.io/name: {{ include "chart-env-injector.name" . }}
